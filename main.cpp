@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include <direct.h> // Để dùng getcwd
+#include <direct.h>
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
@@ -46,12 +46,11 @@ TTF_Font* font = nullptr;
 SDL_Texture* LoadTexture(const char* file) {
     SDL_Surface* surface = IMG_Load(file);
     if (!surface) {
-        cout << "Không thể tải hình ảnh: " << file << " - " << IMG_GetError() << endl;
         return nullptr;
     }
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (!texture) {
-        cout << "Không thể tạo texture: " << SDL_GetError() << endl;
+        cout << "Khong the tao texture: " << SDL_GetError() << endl;
     }
     SDL_FreeSurface(surface);
     return texture;
@@ -178,24 +177,18 @@ void HandleInput(SDL_Event& e) {
         switch (e.key.keysym.sym) {
             case SDLK_a:
             case SDLK_LEFT:
-                cout << "Nhấn trái (A hoặc Mũi tên trái) - x hiện tại: " << player.rect.x << endl;
                 if (player.rect.x > 0) {
                     player.rect.x -= PLAYER_SPEED;
-                    cout << "Di chuyển trái - x mới: " << player.rect.x << endl;
                 }
                 break;
             case SDLK_d:
             case SDLK_RIGHT:
-                cout << "Nhấn phải (D hoặc Mũi tên phải) - x hiện tại: " << player.rect.x << endl;
                 if (player.rect.x < SCREEN_WIDTH - player.rect.w) {
                     player.rect.x += PLAYER_SPEED;
-                    cout << "Di chuyển phải - x mới: " << player.rect.x << endl;
                 } else {
-                    cout << "Không thể di chuyển phải - x >= " << (SCREEN_WIDTH - player.rect.w) << endl;
                 }
                 break;
             case SDLK_SPACE:
-                cout << "Nhấn Phím cách - Bắn đạn" << endl;
                 GameObject bullet = {{player.rect.x + 20, player.rect.y, 10, 20}, bulletTexture};
                 bullets.push_back(bullet);
                 break;
@@ -234,38 +227,36 @@ int main(int argc, char* argv[]) {
     // In thư mục làm việc để gỡ lỗi
     char cwd[256];
     getcwd(cwd, sizeof(cwd));
-    cout << "Thư mục làm việc: " << cwd << endl;
+    cout << "Thu muc lam viec: " << cwd << endl;
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        cout << "Khởi tạo SDL thất bại: " << SDL_GetError() << endl;
+        cout << "Khoi tao SDL that bai: " << SDL_GetError() << endl;
         return 1;
     }
     if (IMG_Init(IMG_INIT_PNG) == 0) {
-        cout << "Khởi tạo IMG thất bại: " << IMG_GetError() << endl;
+        cout << "Khoi tao IMG that bai: " << IMG_GetError() << endl;
         return 1;
     }
     if (TTF_Init() == -1) {
-        cout << "Khởi tạo TTF thất bại: " << TTF_GetError() << endl;
+        cout << "Khoi tao TTF that bai: " << TTF_GetError() << endl;
         return 1;
     }
 
     window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
     if (!window) {
-        cout << "Tạo cửa sổ thất bại: " << SDL_GetError() << endl;
         return 1;
     }
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
-        cout << "Tạo renderer thất bại: " << SDL_GetError() << endl;
         return 1;
     }
 
     // Tải phông chữ với đường dẫn tuyệt đối để kiểm tra
     font = TTF_OpenFont("D:/Space shooter/bin/Debug/assets/font.ttf", 24);
     if (!font) {
-        cout << "Không thể tải phông chữ: " << TTF_GetError() << endl;
-        cout << "Kiểm tra tệp tại: D:/Space shooter/bin/Debug/assets/font.ttf" << endl;
+        cout << "Khong the tao phong chu: " << TTF_GetError() << endl;
+        cout << "Kiem tra tep: D:/Space shooter/bin/Debug/assets/font.ttf" << endl;
         return 1;
     }
 
@@ -298,8 +289,6 @@ int main(int argc, char* argv[]) {
 
     // Kiểm tra textures
     if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture) {
-        cout << "Không thể tải một hoặc nhiều texture. Thoát..." << endl;
-        cout << "Thử đường dẫn tuyệt đối..." << endl;
         playerTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/player.png");
         bulletTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/bullet.png");
         enemyTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/enemy.png");
