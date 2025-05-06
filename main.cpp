@@ -7,12 +7,13 @@
 #include <iostream>
 #include <direct.h>
 #include <string>
+#include <algorithm> // Để dùng std::max
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define PLAYER_SPEED 16
+#define PLAYER_SPEED 20
 #define BULLET_SPEED 10
-#define ENEMY_SPEED 3
+#define ENEMY_SPEED 2
 using namespace std;
 
 // Struct đại diện cho đối tượng trong game
@@ -32,9 +33,11 @@ vector<GameObject> bullets;
 vector<GameObject> enemies;
 bool running = true;
 
-// Biến điểm số
+// Biến điểm số và high score
 int score = 0;
+int highScore = 0; // Biến lưu điểm cao nhất
 SDL_Texture* scoreTexture = nullptr;
+SDL_Texture* highScoreTexture = nullptr;
 
 // Trạng thái trò chơi
 enum GameState { MENU, PLAYING, GAME_OVER };
@@ -84,6 +87,15 @@ void UpdateScoreTexture() {
     }
     string scoreText = "Score: " + to_string(score);
     scoreTexture = CreateTextTexture(scoreText, {255, 255, 255});
+}
+
+// Hàm cập nhật texture high score
+void UpdateHighScoreTexture() {
+    if (highScoreTexture) {
+        SDL_DestroyTexture(highScoreTexture);
+    }
+    string highScoreText = "High Score: " + to_string(highScore);
+    highScoreTexture = CreateTextTexture(highScoreText, {255, 255, 255});
 }
 
 // Hàm tạo kẻ địch ngẫu nhiên
@@ -140,6 +152,8 @@ void Update() {
     // Kiểm tra va chạm giữa phi thuyền và kẻ địch
     for (size_t i = 0; i < enemies.size(); i++) {
         if (SDL_HasIntersection(&player.rect, &enemies[i].rect)) {
+            highScore = max(highScore, score); // Cập nhật high score
+            UpdateHighScoreTexture(); // Cập nhật texture high score
             currentState = GAME_OVER;
             bullets.clear();
             enemies.clear();
@@ -170,7 +184,7 @@ void Render() {
 
     for (auto& enemy : enemies) {
         if (enemy.texture) {
-            SDL_RenderCopy(renderer, enemy.texture, NULL, &enemy.rect);
+            SDL_RenderCopy(renderer, enemy.texture, NULL, &enemy.rect); // Sửa lỗi: dùng enemy.rect thay vì bullet.rect
         }
     }
 
@@ -194,6 +208,7 @@ void RenderMenu() {
         SDL_RenderCopy(renderer, backgroundTexture, NULL, NULL);
     }
 
+    // Vẽ tiêu đề
     if (titleTexture) {
         int texW, texH;
         SDL_QueryTexture(titleTexture, NULL, NULL, &texW, &texH);
@@ -201,6 +216,15 @@ void RenderMenu() {
         SDL_RenderCopy(renderer, titleTexture, NULL, &dst);
     }
 
+    // Vẽ high score
+    if (highScoreTexture) {
+        int texW, texH;
+        SDL_QueryTexture(highScoreTexture, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 150, texW, texH};
+        SDL_RenderCopy(renderer, highScoreTexture, NULL, &dst);
+    }
+
+    // Vẽ các tùy chọn menu
     for (int i = 0; i < numOptions; i++) {
         SDL_Texture* tex = (i == selectedOption) ? selectedTextures[i] : normalTextures[i];
         int texW, texH;
@@ -237,12 +261,20 @@ void RenderGameOver() {
         SDL_RenderCopy(renderer, scoreTexture, NULL, &dst);
     }
 
+    // Vẽ high score
+    if (highScoreTexture) {
+        int texW, texH;
+        SDL_QueryTexture(highScoreTexture, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 180, texW, texH};
+        SDL_RenderCopy(renderer, highScoreTexture, NULL, &dst);
+    }
+
     // Vẽ các tùy chọn Restart/Exit
     for (int i = 0; i < numOptions; i++) {
         SDL_Texture* tex = (i == selectedOption) ? gameOverSelectedTextures[i] : gameOverNormalTextures[i];
         int texW, texH;
         SDL_QueryTexture(tex, NULL, NULL, &texW, &texH);
-        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 200 + i * 50, texW, texH};
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 230 + i * 50, texW, texH};
         SDL_RenderCopy(renderer, tex, NULL, &dst);
     }
 
@@ -384,8 +416,9 @@ int main(int argc, char* argv[]) {
         gameOverSelectedTextures[i] = CreateTextTexture(gameOverOptions[i], {255, 0, 0});
     }
 
-    // Khởi tạo texture điểm số
+    // Khởi tạo texture điểm số và high score
     UpdateScoreTexture();
+    UpdateHighScoreTexture();
 
     // Tải textures
     playerTexture = LoadTexture("assets/player.png");
@@ -398,7 +431,7 @@ int main(int argc, char* argv[]) {
         !titleTexture || !normalTextures[0] || !normalTextures[1] ||
         !selectedTextures[0] || !selectedTextures[1] || !scoreTexture ||
         !gameOverTitleTexture || !gameOverNormalTextures[0] || !gameOverNormalTextures[1] ||
-        !gameOverSelectedTextures[0] || !gameOverSelectedTextures[1]) {
+        !gameOverSelectedTextures[0] || !gameOverSelectedTextures[1] || !highScoreTexture) {
         playerTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/player.png");
         bulletTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/bullet.png");
         enemyTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/enemy.png");
@@ -415,6 +448,7 @@ int main(int argc, char* argv[]) {
             SDL_DestroyTexture(titleTexture);
             SDL_DestroyTexture(gameOverTitleTexture);
             SDL_DestroyTexture(scoreTexture);
+            SDL_DestroyTexture(highScoreTexture);
             TTF_CloseFont(font);
             TTF_Quit();
             SDL_DestroyRenderer(renderer);
@@ -473,6 +507,7 @@ int main(int argc, char* argv[]) {
     SDL_DestroyTexture(enemyTexture);
     SDL_DestroyTexture(backgroundTexture);
     SDL_DestroyTexture(scoreTexture);
+    SDL_DestroyTexture(highScoreTexture);
     TTF_CloseFont(font);
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
