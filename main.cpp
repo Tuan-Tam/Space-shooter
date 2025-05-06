@@ -6,10 +6,11 @@
 #include <ctime>
 #include <iostream>
 #include <direct.h>
+#include <string>
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define PLAYER_SPEED 8
+#define PLAYER_SPEED 16
 #define BULLET_SPEED 10
 #define ENEMY_SPEED 3
 using namespace std;
@@ -31,15 +32,23 @@ vector<GameObject> bullets;
 vector<GameObject> enemies;
 bool running = true;
 
+// Biến điểm số
+int score = 0;
+SDL_Texture* scoreTexture = nullptr;
+
 // Trạng thái trò chơi
-enum GameState { MENU, PLAYING };
+enum GameState { MENU, PLAYING, GAME_OVER };
 GameState currentState = MENU;
 int selectedOption = 0;
 const char* menuOptions[] = {"Start game", "Exit"};
+const char* gameOverOptions[] = {"Restart", "Exit"};
 const int numOptions = 2;
 SDL_Texture* normalTextures[2];
 SDL_Texture* selectedTextures[2];
+SDL_Texture* gameOverNormalTextures[2];
+SDL_Texture* gameOverSelectedTextures[2];
 SDL_Texture* titleTexture = nullptr;
+SDL_Texture* gameOverTitleTexture = nullptr;
 TTF_Font* font = nullptr;
 
 // Hàm tải texture từ file
@@ -54,6 +63,27 @@ SDL_Texture* LoadTexture(const char* file) {
     }
     SDL_FreeSurface(surface);
     return texture;
+}
+
+// Hàm tạo texture từ văn bản
+SDL_Texture* CreateTextTexture(const string& text, SDL_Color color) {
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text.c_str(), color);
+    if (!surface) {
+        cout << "Khong the render van ban: " << text << " - " << TTF_GetError() << endl;
+        return nullptr;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    return texture;
+}
+
+// Hàm cập nhật texture điểm số
+void UpdateScoreTexture() {
+    if (scoreTexture) {
+        SDL_DestroyTexture(scoreTexture);
+    }
+    string scoreText = "Score: " + to_string(score);
+    scoreTexture = CreateTextTexture(scoreText, {255, 255, 255});
 }
 
 // Hàm tạo kẻ địch ngẫu nhiên
@@ -93,6 +123,8 @@ void Update() {
             if (SDL_HasIntersection(&bulletIt->rect, &enemyIt->rect)) {
                 enemyIt = enemies.erase(enemyIt);
                 bulletHit = true;
+                score += 10; // Cộng 10 điểm khi tiêu diệt kẻ địch
+                UpdateScoreTexture(); // Cập nhật texture điểm số
                 break;
             } else {
                 ++enemyIt;
@@ -108,10 +140,11 @@ void Update() {
     // Kiểm tra va chạm giữa phi thuyền và kẻ địch
     for (size_t i = 0; i < enemies.size(); i++) {
         if (SDL_HasIntersection(&player.rect, &enemies[i].rect)) {
-            currentState = MENU;
+            currentState = GAME_OVER;
             bullets.clear();
             enemies.clear();
             player.rect = {SCREEN_WIDTH / 2 - 25, SCREEN_HEIGHT - 60, 50, 50};
+            selectedOption = 0; // Đặt lại lựa chọn cho menu Game Over
         }
     }
 }
@@ -141,10 +174,18 @@ void Render() {
         }
     }
 
+    // Vẽ điểm số
+    if (scoreTexture) {
+        int texW, texH;
+        SDL_QueryTexture(scoreTexture, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {10, 10, texW, texH}; // Góc trên bên trái
+        SDL_RenderCopy(renderer, scoreTexture, NULL, &dst);
+    }
+
     SDL_RenderPresent(renderer);
 }
 
-// Hàm vẽ menu
+// Hàm vẽ menu chính
 void RenderMenu() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -171,7 +212,44 @@ void RenderMenu() {
     SDL_RenderPresent(renderer);
 }
 
-// Hàm xử lý input
+// Hàm vẽ màn hình Game Over
+void RenderGameOver() {
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+
+    if (backgroundTexture) {
+        SDL_RenderCopy(renderer, backgroundTexture, NULL, NULL);
+    }
+
+    // Vẽ tiêu đề "Game Over"
+    if (gameOverTitleTexture) {
+        int texW, texH;
+        SDL_QueryTexture(gameOverTitleTexture, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 100, texW, texH};
+        SDL_RenderCopy(renderer, gameOverTitleTexture, NULL, &dst);
+    }
+
+    // Vẽ điểm số
+    if (scoreTexture) {
+        int texW, texH;
+        SDL_QueryTexture(scoreTexture, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 150, texW, texH};
+        SDL_RenderCopy(renderer, scoreTexture, NULL, &dst);
+    }
+
+    // Vẽ các tùy chọn Restart/Exit
+    for (int i = 0; i < numOptions; i++) {
+        SDL_Texture* tex = (i == selectedOption) ? gameOverSelectedTextures[i] : gameOverNormalTextures[i];
+        int texW, texH;
+        SDL_QueryTexture(tex, NULL, NULL, &texW, &texH);
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 200 + i * 50, texW, texH};
+        SDL_RenderCopy(renderer, tex, NULL, &dst);
+    }
+
+    SDL_RenderPresent(renderer);
+}
+
+// Hàm xử lý input cho trạng thái chơi
 void HandleInput(SDL_Event& e) {
     if (e.type == SDL_KEYDOWN) {
         switch (e.key.keysym.sym) {
@@ -185,7 +263,6 @@ void HandleInput(SDL_Event& e) {
             case SDLK_RIGHT:
                 if (player.rect.x < SCREEN_WIDTH - player.rect.w) {
                     player.rect.x += PLAYER_SPEED;
-                } else {
                 }
                 break;
             case SDLK_SPACE:
@@ -196,7 +273,7 @@ void HandleInput(SDL_Event& e) {
     }
 }
 
-// Hàm xử lý input cho menu
+// Hàm xử lý input cho menu chính
 void HandleMenuInput(SDL_Event& e) {
     if (e.type == SDL_KEYDOWN) {
         switch (e.key.keysym.sym) {
@@ -212,7 +289,35 @@ void HandleMenuInput(SDL_Event& e) {
                     bullets.clear();
                     enemies.clear();
                     player.rect = {SCREEN_WIDTH / 2 - 25, SCREEN_HEIGHT - 60, 50, 50};
+                    score = 0; // Đặt lại điểm số
+                    UpdateScoreTexture();
                 } else if (selectedOption == 1) {
+                    running = false;
+                }
+                break;
+        }
+    }
+}
+
+// Hàm xử lý input cho màn hình Game Over
+void HandleGameOverInput(SDL_Event& e) {
+    if (e.type == SDL_KEYDOWN) {
+        switch (e.key.keysym.sym) {
+            case SDLK_UP:
+                selectedOption = (selectedOption - 1 + numOptions) % numOptions;
+                break;
+            case SDLK_DOWN:
+                selectedOption = (selectedOption + 1) % numOptions;
+                break;
+            case SDLK_RETURN:
+                if (selectedOption == 0) { // Restart
+                    currentState = PLAYING;
+                    bullets.clear();
+                    enemies.clear();
+                    player.rect = {SCREEN_WIDTH / 2 - 25, SCREEN_HEIGHT - 60, 50, 50};
+                    score = 0; // Đặt lại điểm số
+                    UpdateScoreTexture();
+                } else if (selectedOption == 1) { // Exit
                     running = false;
                 }
                 break;
@@ -244,42 +349,43 @@ int main(int argc, char* argv[]) {
 
     window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
     if (!window) {
+        cout << "Tao cua so that bai: " << SDL_GetError() << endl;
         return 1;
     }
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
+        cout << "Tao renderer that bai: " << SDL_GetError() << endl;
         return 1;
     }
 
-    // Tải phông chữ với đường dẫn tuyệt đối để kiểm tra
+    // Tải phông chữ
     font = TTF_OpenFont("D:/Space shooter/bin/Debug/assets/font.ttf", 24);
     if (!font) {
-        cout << "Khong the tao phong chu: " << TTF_GetError() << endl;
+        cout << "Khong the tai phong chu: " << TTF_GetError() << endl;
         cout << "Kiem tra tep: D:/Space shooter/bin/Debug/assets/font.ttf" << endl;
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
         return 1;
     }
 
-    // Tạo texture cho tiêu đề
-    SDL_Surface* titleSurface = TTF_RenderText_Solid(font, "Space Shooter", {255, 255, 255});
-    if (titleSurface) {
-        titleTexture = SDL_CreateTextureFromSurface(renderer, titleSurface);
-        SDL_FreeSurface(titleSurface);
+    // Tạo texture cho menu chính
+    titleTexture = CreateTextTexture("Space Shooter", {255, 255, 255});
+    for (int i = 0; i < numOptions; i++) {
+        normalTextures[i] = CreateTextTexture(menuOptions[i], {255, 255, 255});
+        selectedTextures[i] = CreateTextTexture(menuOptions[i], {255, 0, 0});
     }
 
-    // Tạo texture cho các tùy chọn menu
+    // Tạo texture cho màn hình Game Over
+    gameOverTitleTexture = CreateTextTexture("Game Over", {255, 0, 0});
     for (int i = 0; i < numOptions; i++) {
-        SDL_Surface* normalSurface = TTF_RenderText_Solid(font, menuOptions[i], {255, 255, 255});
-        if (normalSurface) {
-            normalTextures[i] = SDL_CreateTextureFromSurface(renderer, normalSurface);
-            SDL_FreeSurface(normalSurface);
-        }
-        SDL_Surface* selectedSurface = TTF_RenderText_Solid(font, menuOptions[i], {255, 0, 0});
-        if (selectedSurface) {
-            selectedTextures[i] = SDL_CreateTextureFromSurface(renderer, selectedSurface);
-            SDL_FreeSurface(selectedSurface);
-        }
+        gameOverNormalTextures[i] = CreateTextTexture(gameOverOptions[i], {255, 255, 255});
+        gameOverSelectedTextures[i] = CreateTextTexture(gameOverOptions[i], {255, 0, 0});
     }
+
+    // Khởi tạo texture điểm số
+    UpdateScoreTexture();
 
     // Tải textures
     playerTexture = LoadTexture("assets/player.png");
@@ -288,19 +394,27 @@ int main(int argc, char* argv[]) {
     backgroundTexture = LoadTexture("assets/background.png");
 
     // Kiểm tra textures
-    if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture) {
+    if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture ||
+        !titleTexture || !normalTextures[0] || !normalTextures[1] ||
+        !selectedTextures[0] || !selectedTextures[1] || !scoreTexture ||
+        !gameOverTitleTexture || !gameOverNormalTextures[0] || !gameOverNormalTextures[1] ||
+        !gameOverSelectedTextures[0] || !gameOverSelectedTextures[1]) {
         playerTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/player.png");
         bulletTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/bullet.png");
         enemyTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/enemy.png");
         backgroundTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/background.png");
 
         if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture) {
-            cout << "Vẫn thất bại với đường dẫn tuyệt đối. Vui lòng kiểm tra tệp tại D:/Space_shooter/bin/Debug/assets/" << endl;
+            cout << "Van that bai voi duong dan tuyet doi. Vui long kiem tra tep tai D:/Space shooter/bin/Debug/assets/" << endl;
             for (int i = 0; i < numOptions; i++) {
                 SDL_DestroyTexture(normalTextures[i]);
                 SDL_DestroyTexture(selectedTextures[i]);
+                SDL_DestroyTexture(gameOverNormalTextures[i]);
+                SDL_DestroyTexture(gameOverSelectedTextures[i]);
             }
             SDL_DestroyTexture(titleTexture);
+            SDL_DestroyTexture(gameOverTitleTexture);
+            SDL_DestroyTexture(scoreTexture);
             TTF_CloseFont(font);
             TTF_Quit();
             SDL_DestroyRenderer(renderer);
@@ -325,6 +439,8 @@ int main(int argc, char* argv[]) {
                 HandleMenuInput(e);
             } else if (currentState == PLAYING) {
                 HandleInput(e);
+            } else if (currentState == GAME_OVER) {
+                HandleGameOverInput(e);
             }
         }
 
@@ -337,6 +453,8 @@ int main(int argc, char* argv[]) {
                 SpawnEnemy();
                 spawnTimer = 0;
             }
+        } else if (currentState == GAME_OVER) {
+            RenderGameOver();
         }
         SDL_Delay(16);
     }
@@ -345,12 +463,16 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < numOptions; i++) {
         SDL_DestroyTexture(normalTextures[i]);
         SDL_DestroyTexture(selectedTextures[i]);
+        SDL_DestroyTexture(gameOverNormalTextures[i]);
+        SDL_DestroyTexture(gameOverSelectedTextures[i]);
     }
     SDL_DestroyTexture(titleTexture);
+    SDL_DestroyTexture(gameOverTitleTexture);
     SDL_DestroyTexture(playerTexture);
     SDL_DestroyTexture(bulletTexture);
     SDL_DestroyTexture(enemyTexture);
     SDL_DestroyTexture(backgroundTexture);
+    SDL_DestroyTexture(scoreTexture);
     TTF_CloseFont(font);
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
