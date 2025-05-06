@@ -1,8 +1,9 @@
 # depslib dependency file v1.0
-1746520995 source:d:\space shooter\main.cpp
+1746541935 source:d:\space shooter\main.cpp
 	<SDL.h>
 	<SDL_image.h>
 	<SDL_ttf.h>
+	<SDL_mixer.h>
 	<vector>
 	<cstdlib>
 	<ctime>

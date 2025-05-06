@@ -1,6 +1,7 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
+#include <SDL_mixer.h>
 #include <vector>
 #include <cstdlib>
 #include <ctime>
@@ -39,6 +40,12 @@ int highScore = 0; // Biến lưu điểm cao nhất
 SDL_Texture* scoreTexture = nullptr;
 SDL_Texture* highScoreTexture = nullptr;
 
+// Biến âm thanh
+Mix_Chunk* shootSound = nullptr;
+Mix_Chunk* explodeSound = nullptr;
+Mix_Chunk* crashSound = nullptr;
+Mix_Chunk* selectSound = nullptr;
+
 // Trạng thái trò chơi
 enum GameState { MENU, PLAYING, GAME_OVER };
 GameState currentState = MENU;
@@ -58,6 +65,7 @@ TTF_Font* font = nullptr;
 SDL_Texture* LoadTexture(const char* file) {
     SDL_Surface* surface = IMG_Load(file);
     if (!surface) {
+        cout << "Khong the tai hinh anh: " << file << " - " << IMG_GetError() << endl;
         return nullptr;
     }
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
@@ -66,6 +74,15 @@ SDL_Texture* LoadTexture(const char* file) {
     }
     SDL_FreeSurface(surface);
     return texture;
+}
+
+// Hàm tải âm thanh từ file
+Mix_Chunk* LoadSound(const char* file) {
+    string absolutePath = "D:\\Space shooter\\bin\\Debug\\assets\\" + string(file);
+    Mix_Chunk* sound = Mix_LoadWAV(absolutePath.c_str());
+    if (!sound) {
+    }
+    return sound;
 }
 
 // Hàm tạo texture từ văn bản
@@ -137,6 +154,9 @@ void Update() {
                 bulletHit = true;
                 score += 10; // Cộng 10 điểm khi tiêu diệt kẻ địch
                 UpdateScoreTexture(); // Cập nhật texture điểm số
+                if (explodeSound) {
+                    Mix_PlayChannel(-1, explodeSound, 0); // Phát âm thanh nổ
+                }
                 break;
             } else {
                 ++enemyIt;
@@ -154,6 +174,9 @@ void Update() {
         if (SDL_HasIntersection(&player.rect, &enemies[i].rect)) {
             highScore = max(highScore, score); // Cập nhật high score
             UpdateHighScoreTexture(); // Cập nhật texture high score
+            if (crashSound) {
+                Mix_PlayChannel(-1, crashSound, 0); // Phát âm thanh va chạm
+            }
             currentState = GAME_OVER;
             bullets.clear();
             enemies.clear();
@@ -184,7 +207,7 @@ void Render() {
 
     for (auto& enemy : enemies) {
         if (enemy.texture) {
-            SDL_RenderCopy(renderer, enemy.texture, NULL, &enemy.rect); // Sửa lỗi: dùng enemy.rect thay vì bullet.rect
+            SDL_RenderCopy(renderer, enemy.texture, NULL, &enemy.rect);
         }
     }
 
@@ -257,7 +280,7 @@ void RenderGameOver() {
     if (scoreTexture) {
         int texW, texH;
         SDL_QueryTexture(scoreTexture, NULL, NULL, &texW, &texH);
-        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 150, texW, texH};
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 170, texW, texH};
         SDL_RenderCopy(renderer, scoreTexture, NULL, &dst);
     }
 
@@ -265,7 +288,7 @@ void RenderGameOver() {
     if (highScoreTexture) {
         int texW, texH;
         SDL_QueryTexture(highScoreTexture, NULL, NULL, &texW, &texH);
-        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 180, texW, texH};
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 210, texW, texH};
         SDL_RenderCopy(renderer, highScoreTexture, NULL, &dst);
     }
 
@@ -274,7 +297,7 @@ void RenderGameOver() {
         SDL_Texture* tex = (i == selectedOption) ? gameOverSelectedTextures[i] : gameOverNormalTextures[i];
         int texW, texH;
         SDL_QueryTexture(tex, NULL, NULL, &texW, &texH);
-        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 230 + i * 50, texW, texH};
+        SDL_Rect dst = {(SCREEN_WIDTH - texW) / 2, 260 + i * 50, texW, texH};
         SDL_RenderCopy(renderer, tex, NULL, &dst);
     }
 
@@ -300,6 +323,9 @@ void HandleInput(SDL_Event& e) {
             case SDLK_SPACE:
                 GameObject bullet = {{player.rect.x + 20, player.rect.y, 10, 20}, bulletTexture};
                 bullets.push_back(bullet);
+                if (shootSound) {
+                    Mix_PlayChannel(-1, shootSound, 0); // Phát âm thanh bắn
+                }
                 break;
         }
     }
@@ -316,6 +342,9 @@ void HandleMenuInput(SDL_Event& e) {
                 selectedOption = (selectedOption + 1) % numOptions;
                 break;
             case SDLK_RETURN:
+                if (selectSound) {
+                    Mix_PlayChannel(-1, selectSound, 0); // Phát âm thanh chọn
+                }
                 if (selectedOption == 0) {
                     currentState = PLAYING;
                     bullets.clear();
@@ -342,6 +371,9 @@ void HandleGameOverInput(SDL_Event& e) {
                 selectedOption = (selectedOption + 1) % numOptions;
                 break;
             case SDLK_RETURN:
+                if (selectSound) {
+                    Mix_PlayChannel(-1, selectSound, 0); // Phát âm thanh chọn
+                }
                 if (selectedOption == 0) { // Restart
                     currentState = PLAYING;
                     bullets.clear();
@@ -366,36 +398,72 @@ int main(int argc, char* argv[]) {
     getcwd(cwd, sizeof(cwd));
     cout << "Thu muc lam viec: " << cwd << endl;
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    // Khởi tạo SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         cout << "Khoi tao SDL that bai: " << SDL_GetError() << endl;
         return 1;
     }
     if (IMG_Init(IMG_INIT_PNG) == 0) {
         cout << "Khoi tao IMG that bai: " << IMG_GetError() << endl;
+        SDL_Quit();
         return 1;
     }
     if (TTF_Init() == -1) {
         cout << "Khoi tao TTF that bai: " << TTF_GetError() << endl;
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    // Khởi tạo SDL_mixer
+    if (Mix_Init(0) < 0) {
+        cout << "Khoi tao Mix_Init that bai: " << Mix_GetError() << endl;
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+        cout << "Khoi tao Mix_OpenAudio that bai: " << Mix_GetError() << endl;
+        Mix_Quit();
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
         return 1;
     }
 
     window = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
     if (!window) {
         cout << "Tao cua so that bai: " << SDL_GetError() << endl;
+        Mix_CloseAudio();
+        Mix_Quit();
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
         return 1;
     }
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
         cout << "Tao renderer that bai: " << SDL_GetError() << endl;
+        SDL_DestroyWindow(window);
+        Mix_CloseAudio();
+        Mix_Quit();
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
         return 1;
     }
 
     // Tải phông chữ
-    font = TTF_OpenFont("D:/Space shooter/bin/Debug/assets/font.ttf", 24);
+    font = TTF_OpenFont("D:\\Space shooter\\bin\\Debug\\assets\\font.ttf", 24);
     if (!font) {
         cout << "Khong the tai phong chu: " << TTF_GetError() << endl;
-        cout << "Kiem tra tep: D:/Space shooter/bin/Debug/assets/font.ttf" << endl;
+        cout << "Kiem tra tep: D:\\Space shooter\\bin\\Debug\\assets\\font.ttf" << endl;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        Mix_CloseAudio();
+        Mix_Quit();
         TTF_Quit();
         IMG_Quit();
         SDL_Quit();
@@ -409,8 +477,10 @@ int main(int argc, char* argv[]) {
         selectedTextures[i] = CreateTextTexture(menuOptions[i], {255, 0, 0});
     }
 
-    // Tạo texture cho màn hình Game Over
+    // Tạo texture cho màn hình Game Over với kích thước chữ lớn hơn
+    TTF_SetFontSize(font, 36); // Tăng kích thước chữ lên 36 cho "Game Over"
     gameOverTitleTexture = CreateTextTexture("Game Over", {255, 0, 0});
+    TTF_SetFontSize(font, 24); // Khôi phục kích thước chữ về 24
     for (int i = 0; i < numOptions; i++) {
         gameOverNormalTextures[i] = CreateTextTexture(gameOverOptions[i], {255, 255, 255});
         gameOverSelectedTextures[i] = CreateTextTexture(gameOverOptions[i], {255, 0, 0});
@@ -421,10 +491,16 @@ int main(int argc, char* argv[]) {
     UpdateHighScoreTexture();
 
     // Tải textures
-    playerTexture = LoadTexture("assets/player.png");
-    bulletTexture = LoadTexture("assets/bullet.png");
-    enemyTexture = LoadTexture("assets/enemy.png");
-    backgroundTexture = LoadTexture("assets/background.png");
+    playerTexture = LoadTexture("D:\\Space shooter\\bin\\Debug\\assets\\player.png");
+    bulletTexture = LoadTexture("D:\\Space shooter\\bin\\Debug\\assets\\bullet.png");
+    enemyTexture = LoadTexture("D:\\Space shooter\\bin\\Debug\\assets\\enemy.png");
+    backgroundTexture = LoadTexture("D:\\Space shooter\\bin\\Debug\\assets\\background.png");
+
+    // Tải âm thanh
+    shootSound = LoadSound("shoot.wav");
+    explodeSound = LoadSound("explode.wav");
+    crashSound = LoadSound("crash.wav");
+    selectSound = LoadSound("select.wav");
 
     // Kiểm tra textures
     if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture ||
@@ -432,31 +508,34 @@ int main(int argc, char* argv[]) {
         !selectedTextures[0] || !selectedTextures[1] || !scoreTexture ||
         !gameOverTitleTexture || !gameOverNormalTextures[0] || !gameOverNormalTextures[1] ||
         !gameOverSelectedTextures[0] || !gameOverSelectedTextures[1] || !highScoreTexture) {
-        playerTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/player.png");
-        bulletTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/bullet.png");
-        enemyTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/enemy.png");
-        backgroundTexture = LoadTexture("D:/Space shooter/bin/Debug/assets/background.png");
-
-        if (!playerTexture || !bulletTexture || !enemyTexture || !backgroundTexture) {
-            cout << "Van that bai voi duong dan tuyet doi. Vui long kiem tra tep tai D:/Space shooter/bin/Debug/assets/" << endl;
-            for (int i = 0; i < numOptions; i++) {
-                SDL_DestroyTexture(normalTextures[i]);
-                SDL_DestroyTexture(selectedTextures[i]);
-                SDL_DestroyTexture(gameOverNormalTextures[i]);
-                SDL_DestroyTexture(gameOverSelectedTextures[i]);
-            }
-            SDL_DestroyTexture(titleTexture);
-            SDL_DestroyTexture(gameOverTitleTexture);
-            SDL_DestroyTexture(scoreTexture);
-            SDL_DestroyTexture(highScoreTexture);
-            TTF_CloseFont(font);
-            TTF_Quit();
-            SDL_DestroyRenderer(renderer);
-            SDL_DestroyWindow(window);
-            IMG_Quit();
-            SDL_Quit();
-            return 1;
+        cout << "Khong the tai mot hoac nhieu tai nguyen hinh anh hoac van ban." << endl;
+        for (int i = 0; i < numOptions; i++) {
+            SDL_DestroyTexture(normalTextures[i]);
+            SDL_DestroyTexture(selectedTextures[i]);
+            SDL_DestroyTexture(gameOverNormalTextures[i]);
+            SDL_DestroyTexture(gameOverSelectedTextures[i]);
         }
+        SDL_DestroyTexture(titleTexture);
+        SDL_DestroyTexture(gameOverTitleTexture);
+        SDL_DestroyTexture(playerTexture);
+        SDL_DestroyTexture(bulletTexture);
+        SDL_DestroyTexture(enemyTexture);
+        SDL_DestroyTexture(backgroundTexture);
+        SDL_DestroyTexture(scoreTexture);
+        SDL_DestroyTexture(highScoreTexture);
+        Mix_FreeChunk(shootSound);
+        Mix_FreeChunk(explodeSound);
+        Mix_FreeChunk(crashSound);
+        Mix_FreeChunk(selectSound);
+        TTF_CloseFont(font);
+        Mix_CloseAudio();
+        Mix_Quit();
+        TTF_Quit();
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
     }
 
     // Thiết lập nhân vật
@@ -508,7 +587,13 @@ int main(int argc, char* argv[]) {
     SDL_DestroyTexture(backgroundTexture);
     SDL_DestroyTexture(scoreTexture);
     SDL_DestroyTexture(highScoreTexture);
+    Mix_FreeChunk(shootSound);
+    Mix_FreeChunk(explodeSound);
+    Mix_FreeChunk(crashSound);
+    Mix_FreeChunk(selectSound);
     TTF_CloseFont(font);
+    Mix_CloseAudio();
+    Mix_Quit();
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
